@@ -107,6 +107,29 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 	// NOTE: this method will NOT be called by the grading code. But you will probably find it useful to 
 	//   implement this method and use it as a helper during the updateWeights phase.
 
+	for(int i = 0; i < observations.size() ;i++)
+	{
+		double min_dist = numeric_limits<double>::max();
+		landmarkObs obs = observations[i];
+
+		int map_id = -1;
+
+		for(int j =0; j < predicted.size(); j++)
+		{
+			landmarkObs pred = predicted[j];
+
+			double curr_dist = dist(obs.x, obs.y, pred.x, pred.y);
+
+			if(curr_dist < min_dist)
+			{
+				min_dist = curr_dist;
+				map_id = pred.id;
+			}
+
+		}
+		observations[i].id = map_id;
+	}
+
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], 
@@ -121,12 +144,100 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   and the following is a good resource for the actual equation to implement (look at equation 
 	//   3.33
 	//   http://planning.cs.uiuc.edu/node99.html
+
+	double std_x = std_landmark[0];
+	double std_y = std_landmark[1];
+
+	for(int i = 0; i < num_particles; i++)
+	{
+		double x_part = particles[i].x;
+		double y_part = particles[i].y;
+		double theta = particles[i].theta;
+
+		std::vector<LandmarkObs> predictions;
+
+		for(int m = 0; m < map_landmarks.landmark_list.size(); m++)
+		{
+			float landmark_x = map_landmarks.landmark_list[m].x_f;
+			float landmark_y = map_landmarks.landmark_list[m].y_f;
+			int landmark_id = map_landmarks.landmark_list[m].id_i;
+
+			if(fabs(landmark_x - x_part) <= sensor_range && fabs(landmark_y - y_part) <= sensor_range )
+			{
+				predictions.push_back(landmarkObs{landmark_id, landmark_x, landmark_y});
+			}
+		}
+
+		vector<LandmarkObs> trans_observations;
+		for (int j = 0; j < observations.size(); j++)
+		{
+			LandmarkObs trans_obs;
+			trans_obs.x = x_part + cos(theta) * observations[i].x - sin(theta) * observations[i].y;
+			trans_obs.y = y_part + sin(theta) * observations[i].x + cos(theta) * observations[i].y;
+			trans_observations.push_back(trans_obs);			
+		}
+
+		particles[i].weight = 1.0;
+
+		dataAssociation(predictions, trans_observations);
+
+		for(int k = 0; k < trans_observations.size(); k++)
+		{  
+
+			int association_id = trans_observations[k].id;
+			double meas_x = trans_observations[k].x;
+			double meas_y = trans_observations[k].y;
+
+
+			for(int a = 0; a < predictions.size(); a++)
+			{
+				if(predictions[a].id == association_id)
+				{
+					double mu_x = predictions.x;
+					double mu_y = predictions.y;
+				}
+
+			}
+			long double w = (1/(2*M_PI*std_x*std_y))*exp(-((pow((meas_x-mu_x),2)/(2*pow(std_x,2))) + (pow((meas_x-mu_x),2)/(2*pow(std_x,2)))));
+
+			if(w > 0)
+				particles[i].weight *= w;
+
+		}
+		weights.push_back(particles[i].weight);
+
+	}
+
+	
+
 }
 
 void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+	uniform_int_distribution<int> uniintdist(0, num_particles-1);
+	default_random_engine gen;
+	int index = uniintdist(gen);
+	vector<Particle> new_particles;
+
+	double max_weight = std::max_element(weights.begin(),weights.end());
+
+	uniform_real_distribution<double> unirealdist(0.0, max_weight);
+
+	double beta = 0.0;
+
+	for(int i = 0; i < num_particles; i++)
+	{
+		beta += unirealdist(gen) * 2;
+		while( weights[index] < beta):
+		{
+			beta -= weights[index];
+			index = (index + 1) % N;
+		}
+		new_particles.push_back(particles[index]);
+	}
+	particles = new_particles;
 
 }
 
